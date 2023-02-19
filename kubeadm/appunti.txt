@@ -1,0 +1,527 @@
+K8S Prerequisites:
+
+0) Disable SELinux services:
+sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+reboot
+
+0) Install dependencies needed by kubeadm:
+dnf install -y iproute-tc util-linux-user
+
+1) Disabling all swap services:
+swapoff -a
+sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+2) Disabling firewall services:
+systemctl stop firewalld ; systemctl disable firewalld
+
+3) Configure the local IP tables to see the Bridged Traffic:
+lsmod | grep br_netfilter
+modprobe br_netfilter
+cat <<EOF | tee /etc/modules-load.d/k8s.conf
+br_netfilter
+EOF
+
+cat <<EOF | tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+Apply the configuration with sysctl --system
+
+4) Install Docker on all the nodes, enable it and start it.
+5) Enable Docker for CGroup management.
+cat <<EOF | tee /etc/docker/daemon.json
+{
+   "exec-opts": ["native.cgroupdriver=systemd"],
+   "log-driver": "json-file",
+   "log-opts": {
+      "max-size": "100m"
+   },
+   "storage-driver": "overlay2"
+}
+EOF
+
+6) Install kubeadm, kubectl and kubelet utilities:
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kubelet kubeadm kubectl
+EOF
+
+dnf install kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+7) Enable and start the kubelet on all the nodes:
+systemctl enable --now kubelet
+
+8) Configure the CGroups driver (skippable if using Docker as the CRI)
+
+9) Deploy the Kubernetes cluster using kubeadm (only on the master as root)
+Pre-pull images: kubeadm config images pull
+kubeadm init --pod-network-cidr=10.10.0.0/16 --apiserver-advertise-address=<master node ip>
+
+9b) If deploying in HA Mode with multiple master, just launch the following command in only 1 master node:
+kubeadm init --control-plane-endpoint="load_balancer_address:6443" --upload-certs --apiserver-advertise-address=node_ip --pod-network-cidr=10.10.0.0/16
+
+Follow the instructions listed at the end and save the join command.
+
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.169.0.15:6443 --token 0ofu9m.zn4e5v788dju5iht \
+    --discovery-token-ca-cert-hash sha256:d93015f83886dbf28470c6032422f3d86999d2c00b97a0d135d3717cf7b9e1c0
+
+Se il comando di join è stato perso si può fare:
+kubeadm token list
+Se è stato perso il discovery token ca cert hash:
+openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | \
+   openssl dgst -sha256 -hex | sed 's/^.* //'
+
+Alternativamente si può generare un nuovo token e stampare il join command:
+kubeadm token create --print-join-command
+
+10) Install the CNI for pod networking system (for example, Canal):
+https://projectcalico.docs.tigera.io/getting-started/kubernetes/flannel/flannel
+
+11) Join the worker nodes with the command kubeadm gave to you.
+
+12) Register the cluster in Rancher: "Import Existing" and launch the docker command it suggests you.
+Launch the following command to fix the cattle-cluster-agent not resolving the rancher master through the domain:
+kubectl -n cattle-system patch  deployments cattle-cluster-agent --patch '{
+    "spec": {
+        "template": {
+            "spec": {
+                "hostAliases": [
+                    {
+                      "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                      "ip": "192.169.0.11"
+                    }
+                ]
+            }
+        }
+    }
+}'
+
+kubectl -n cattle-system patch  daemonsets cattle-node-agent --patch '{
+ "spec": {
+     "template": {
+         "spec": {
+             "hostAliases": [
+                 {
+                    "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                    "ip": "192.169.0.11"
+                 }
+             ]
+         }
+     }
+ }
+}'
+
+kubectl -n cattle-fleet-system patch deployments fleet-agent --patch '{
+    "spec": {
+        "template": {
+            "spec": {
+                "hostAliases": [
+                    {
+                      "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                      "ip": "192.169.0.11"
+                    }
+                ]
+            }
+        }
+    }
+}'
+
+13) ROTATING CERTIFICATES:
+To see the certs expiration dates:
+ a) kubeadm certs check-expiration
+You can see the expiration date for the API Server:
+ b) echo | openssl s_client -showcerts -connect 192.169.0.15:6443 -servername api 2>/dev/null | openssl x509 -noout -enddate
+Renew the certificates:
+ c) kubeadm certs renew all
+You will get the message:
+Done renewing certificates. You must restart the kube-apiserver, kube-controller-manager, kube-scheduler and etcd, so that they can use the new certificates.
+
+To restart these components, move all the YAML files in the /etc/kubernetes/manifests directory somewhere and recopy them there.
+This will ensure the new certs will be regenerated.
+
+VARIE:
+0) Rimuovere kernel vecchi:
+dnf remove --oldinstallonly --setopt installonly_limit=2 kernel
+
+1) Eliminare un nodo da un cluster:
+kubectl drain worker3 --ignore-daemonsets --delete-emptydir-data
+Sul nodo cancellato:
+kubeadm reset
+Infine:
+kubectl delete node worker3
+
+2) Un cluster rimane in rancher senza poter essere cancellato dalla UI:
+kubectl get clusters.management.cattle.io  # find the cluster you want to delete
+export CLUSTERID="c-xxxxxxxxx" #
+kubectl patch clusters.management.cattle.io $CLUSTERID -p '{"metadata":{"finalizers":[]}}' --type=merge
+kubectl delete clusters.management.cattle.io $CLUSTERID
+
+3) Aggiornare la CA di un downstream cluster dopo aver ruotato i certificati inclusi la CA con rke cert rotate --rotate-ca:
+kubectl patch clusters.management.cattle.io <REPLACE_WITH_CLUSTERID> -p '{"status":{"agentImage":"dummy"}}' --type merge
+
+
+
+ADDIZIONALE:
+kubectl -n cattle-system patch  deployments cattle-cluster-agent --patch '{
+    "spec": {
+        "template": {
+            "spec": {
+                "hostAliases": [
+                    {
+                      "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                      "ip": "192.169.0.11"
+                    }
+                ]
+            }
+        }
+    }
+}'
+
+kubectl -n cattle-system patch  daemonsets cattle-node-agent --patch '{
+ "spec": {
+     "template": {
+         "spec": {
+             "hostAliases": [
+                 {
+                    "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                    "ip": "192.169.0.11"
+                 }
+             ]
+         }
+     }
+ }
+}'
+
+
+
+HAPROXY:
+HAProxy on Rocky Linux 8.5:
+dnf config-manager --set-enabled powertools
+
+yum install -y git ca-certificates gcc glibc-devel \
+  lua-devel pcre-devel openssl-devel systemd-devel \
+  make curl zlib-devel
+
+make TARGET=linux-glibc ARCH=x86_64 CPU=generic USE_LUA=1 USE_OPENSSL=1 USE_PCRE=1 \
+PCREDIR= USE_ZLIB=1 USE_SYSTEMD=1
+
+haproxy si troverà nella root del src tree. Sostituire questo binario al vecchio.
+
+File di configurazione in /etc/haproxy/haproxy.cfg
+
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    # Prepare with mkdir -p /var/empty/haproxy && chmod 0 /var/empty/haproxy
+    chroot /var/empty/haproxy
+    pidfile /var/run/haproxy/haproxy.pid
+    stats socket /var/run/haproxy/haproxy.sock mode 600 level admin expose-fd listeners
+    stats timeout 2m
+    user haproxy
+    group haproxy
+    daemon
+    zero-warning
+
+    # Default SSL material location
+    ca-base /etc/ssl/certs
+    crt-base /etc/ssl/private
+
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    timeout connect 5000ms
+    timeout client  50000ms
+    timeout server  50000ms
+
+frontend stats
+    bind *:8404
+    stats enable
+    stats uri /stat
+    stats refresh 10s
+    stats admin if TRUE
+
+frontend kubernetes-apiserver-frontend
+    mode tcp
+    option tcplog
+    bind 192.169.0.5:6443
+    default_backend kubernetes-apiserver-backend
+
+backend kubernetes-apiserver-backend
+    mode tcp
+    option tcp-check
+    balance roundrobin
+    server kmaster1 192.169.0.6:6443 check fall 3 rise 2
+    server kmaster2 192.169.0.7:6443 check fall 3 rise 2
+    server kmaster3 192.169.0.8:6443 check fall 3 rise 2
+
+
+MULTIMASTER SETUP:
+Multi-Master Setup.
+
+Assunzioni:
+LoadBalancer: 172.16.16.100
+Master 1:     172.16.16.101
+Master 2:     172.16.16.102
+Worker 1:     172.16.16.201
+
+1) Installare HA-Proxy sul nodo di LoadBalancer:
+dnf install haproxy.
+2) Creare /var/empty/haproxy dir with chmod 0
+3) Creare /var/run/haproxy dir e settare il PID file in /usr/lib/systemd/system/haproxy.service
+4) File di conf HAProxy:
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    # Prepare with mkdir -p /var/empty/haproxy && chmod 0 /var/empty/haproxy
+    chroot /var/empty/haproxy
+    pidfile /var/run/haproxy/haproxy.pid
+    stats socket /var/run/haproxy/haproxy.sock mode 600 level admin expose-fd listeners
+    stats timeout 2m
+    user haproxy
+    group haproxy
+    daemon
+    zero-warning
+
+    # Default SSL material location
+    ca-base /etc/ssl/certs
+    crt-base /etc/ssl/private
+
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    timeout connect 5000ms
+    timeout client  50000ms
+    timeout server  50000ms
+
+frontend stats
+    bind *:8404
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats admin if TRUE
+
+frontend kubernetes-apiserver-frontend
+    mode tcp
+    option tcplog
+    bind 192.169.0.5:6443
+    default_backend kubernetes-apiserver-backend
+
+backend kubernetes-apiserver-backend
+    mode tcp
+    option tcp-check
+    balance roundrobin
+    server kmaster1 192.169.0.6:6443 check fall 3 rise 2
+    server kmaster2 192.169.0.7:6443 check fall 3 rise 2
+    server kmaster3 192.169.0.8:6443 check fall 3 rise 2
+
+Su tutti i nodi k8s (sia master che worker):
+1) Disabilitare SELinux:
+sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+reboot
+
+2) Installare dipendenze necessarie per Kubeadm:
+dnf install -y iproute-tc util-linux-user
+
+3) Disabilitare i servizi di swap:
+swapoff -a
+sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+4) Disabilitare il firewall:
+systemctl stop firewalld ; systemctl disable firewalld
+
+5) Configurare il traffico di rete bridged:
+lsmod | grep br_netfilter
+modprobe br_netfilter
+cat <<EOF | tee /etc/modules-load.d/k8s.conf
+br_netfilter
+EOF
+
+cat <<EOF | tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+6) Installare Docker e abilitare i cgroup per systemd:
+cat <<EOF | tee /etc/docker/daemon.json
+{
+   "exec-opts": ["native.cgroupdriver=systemd"],
+   "log-driver": "json-file",
+   "log-opts": {
+      "max-size": "100m"
+   },
+   "storage-driver": "overlay2"
+}
+EOF
+
+7) Abilitare le regole con sysctl --system e riavviare i sistemi.
+
+8) Abilitare i repository delle utility K8S:
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kubelet kubeadm kubectl
+EOF
+
+9) Installare le k8s utilities:
+dnf install kubelet[=1.19.2-00] kubeadm[=1.19.2-00] kubectl[=1.19.2-00] --disableexcludes=kubernetes
+
+10) Abilitare e startare il kubelet service:
+systemctl enable --now kubelet
+
+INIZIALIZZARE IL CLUSTER (SU UN SOLO NODO MASTER, per es. MASTER1):
+1) kubeadm init --control-plane-endpoint="172.16.16.100:6443" --upload-certs --apiserver-advertise-address=172.16.16.101 --pod-network-cidr=10.10.0.0/16
+
+Compariranno alla fine del processo due comandi distinti per kubeadm: uno per aggiungere nodi master, un altro per aggiugnere nodi worker.
+Aggiungere i master rimanenti e i worker rimanenti subito, ma al comando per aggiungere i master aggiungere il flag
+--apiserver-advertise-address=<IP_NODO_MASTER>
+Sul worker node è possibile usare il comando cosi come viene fornito.
+I nodi nodi non saranno in stato READY fino a che non verrà installata una POD network.
+
+2) Per configurare l'accesso al cluster con kubectl copiare il file admin.conf in .kube:
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+3) Installare la POD network (CNI) seguendo le direttive indicate su:
+https://projectcalico.docs.tigera.io/getting-started/kubernetes/flannel/flannel
+
+4) Register the cluster in Rancher: "Import Existing" and launch the docker command it suggests you.
+Launch the following command to fix the cattle-cluster-agent not resolving the rancher master through the domain:
+kubectl -n cattle-system patch  deployments cattle-cluster-agent --patch '{
+    "spec": {
+        "template": {
+            "spec": {
+                "hostAliases": [
+                    {
+                      "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                      "ip": "192.169.0.11"
+                    }
+                ]
+            }
+        }
+    }
+}'
+
+kubectl -n cattle-system patch  daemonsets cattle-node-agent --patch '{
+ "spec": {
+     "template": {
+         "spec": {
+             "hostAliases": [
+                 {
+                    "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                    "ip": "192.169.0.11"
+                 }
+             ]
+         }
+     }
+ }
+}'
+
+kubectl -n cattle-fleet-system patch deployments fleet-agent --patch '{
+    "spec": {
+        "template": {
+            "spec": {
+                "hostAliases": [
+                    {
+                      "hostnames":
+                      [
+                        "k8s.objectway.it"
+                      ],
+                      "ip": "192.169.0.11"
+                    }
+                ]
+            }
+        }
+    }
+}'
+
+NOTE ADDIZIONALI:
+
+1) ROTATING CERTIFICATES:
+To see the certs expiration dates:
+ a) kubeadm certs check-expiration
+You can see the expiration date for the API Server:
+ b) echo | openssl s_client -showcerts -connect 192.169.0.15:6443 -servername api 2>/dev/null | openssl x509 -noout -enddate
+Renew the certificates:
+ c) kubeadm certs renew all
+You will get the message:
+Done renewing certificates. You must restart the kube-apiserver, kube-controller-manager, kube-scheduler and etcd, so that they can use the new certificates.
+
+To restart these components, move all the YAML files in the /etc/kubernetes/manifests directory somewhere and recopy them there.
+This will ensure the new certs will be regenerated.
+
+2) Rimuovere kernel vecchi:
+dnf remove --oldinstallonly --setopt installonly_limit=2 kernel
+
+3) Eliminare un nodo da un cluster:
+kubectl drain worker3 --ignore-daemonsets --delete-emptydir-data
+Sul nodo cancellato:
+kubeadm reset
+Infine:
+kubectl delete node worker3
+
+4) Un cluster rimane in rancher senza poter essere cancellato dalla UI:
+kubectl get clusters.management.cattle.io  # find the cluster you want to delete
+export CLUSTERID="c-xxxxxxxxx" #
+kubectl patch clusters.management.cattle.io $CLUSTERID -p '{"metadata":{"finalizers":[]}}' --type=merge
+kubectl delete clusters.management.cattle.io $CLUSTERID
+
+5) Aggiornare la CA di un downstream cluster dopo aver ruotato i certificati inclusi la CA con rke cert rotate --rotate-ca:
+kubectl patch clusters.management.cattle.io <REPLACE_WITH_CLUSTERID> -p '{"status":{"agentImage":"dummy"}}' --type merge
+
