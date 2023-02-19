@@ -1,0 +1,4 @@
+--traefik-config ${SNAP_DATA}/args/traefik/traefik.yaml
+--kubeconfig ${SNAP_DATA}/credentials/kubelet.config
+--refresh-interval 0s
+
