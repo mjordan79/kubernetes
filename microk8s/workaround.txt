@@ -1,0 +1,2 @@
+If modifying csr.conf.template leads to no difference:
+snap set microk8s _test="$(date)"
