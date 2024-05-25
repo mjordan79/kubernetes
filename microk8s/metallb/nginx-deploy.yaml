@@ -13,7 +13,7 @@ metadata:
   name: nginx
   namespace: nginx
 spec:
-  replicas: 5
+  replicas: 4
   selector:
     matchLabels:
       app: nginx
@@ -55,7 +55,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: nginx.example.com
+  - host: nginx.objectway.it
     http:
       paths:
       - backend:
