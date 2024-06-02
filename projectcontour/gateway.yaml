@@ -1,0 +1,35 @@
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: contour
+  namespace: projectcontour
+spec:
+  gatewayClassName: contour
+  listeners:
+    - name: ow-http-it
+      protocol: HTTP
+      port: 80
+      hostname: "*.objectway.it"
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+            - {key: com.objectway/expose, operator: In, values: [http]}
+    - name: ow-https-it
+      protocol: HTTPS
+      port: 443
+      hostname: "*.objectway.it"
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+            - {key: com.objectway/expose, operator: In, values: [https]}
+      tls:
+        mode: Terminate
+        certificateRefs:
+        - kind: Secret
+          group: ""
+          name: owcert
+

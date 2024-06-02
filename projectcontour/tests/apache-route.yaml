@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apache
+  labels:
+    com.objecteway/expose: https
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: apache
+  name: apache
+  namespace: apache
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: apache
+  template:
+    metadata:
+      labels:
+        app: apache
+    spec:
+      containers:
+      - image: httpd:latest
+        name: apache
+        ports:
+        - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: apache
+  name: apache
+  namespace: apache
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: apache
+
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: apache-route
+  namespace: apache
+spec:
+  hostnames:
+  - apache.objectway.it
+  parentRefs:
+  - kind: Gateway
+    name: contour
+    namespace: projectcontour
+  rules:
+  - backendRefs:
+    - name: apache
+      port: 80
+
