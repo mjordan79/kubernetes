@@ -1,8 +1,8 @@
 kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
-  name: contour
-  namespace: projectcontour
+  name: ow-gateway
+  namespace: ow-system
 spec:
   gatewayClassName: contour
   listeners:

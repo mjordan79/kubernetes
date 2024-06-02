@@ -14,7 +14,7 @@ metadata:
   name: nginx
   namespace: nginx
 spec:
-  replicas: 4
+  replicas: 1
   selector:
     matchLabels:
       app: nginx
@@ -56,8 +56,9 @@ spec:
   - nginx.objectway.it
   parentRefs:
   - kind: Gateway
-    name: contour
-    namespace: projectcontour
+    name: ow-gateway
+    namespace: ow-system
+    sectionName: ow-http-it
   rules:
   - backendRefs:
     - name: nginx

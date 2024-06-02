@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   name: apache
   labels:
-    com.objecteway/expose: https
+    com.objectway/expose: https
 
 ---
 apiVersion: apps/v1
@@ -14,7 +14,7 @@ metadata:
   name: apache
   namespace: apache
 spec:
-  replicas: 4
+  replicas: 1
   selector:
     matchLabels:
       app: apache
@@ -56,8 +56,9 @@ spec:
   - apache.objectway.it
   parentRefs:
   - kind: Gateway
-    name: contour
-    namespace: projectcontour
+    name: ow-gateway
+    namespace: ow-system
+    sectionName: ow-https-it
   rules:
   - backendRefs:
     - name: apache
