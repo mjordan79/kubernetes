@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 openssl genrsa -out localCA.key 2048
-openssl req -x509 -new -nodes -key localCA.key -sha256 -days 3650 -out localCA.pem \
+openssl req -x509 -new -nodes -key localCA.key -sha256 -days 3650 -out localCA.crt \
   -subj "/C=IT/ST=Lombardia/L=Milano/O=DigitalNucleus/OU=Dev/CN=Local Dev CA"
 cp localCA.crt /usr/local/share/ca-certificates
 # This will update the Trusted CA in /etc/ssl/certs
