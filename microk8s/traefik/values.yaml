@@ -1,0 +1,108 @@
+deployment:
+  kind: DaemonSet
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+ingressClass:
+  enabled: false
+
+gateway:
+  enabled: true
+  listeners:
+    web:
+      port: 8000
+      protocol: HTTP
+    websecure:
+      port: 8443
+      protocol: HTTPS
+      certificateRefs:
+        - name: my-tls-secret
+
+gatewayClass:
+  enabled: true
+
+api:
+  dashboard: true
+  basepath: /traefik
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+readinessProbe:
+  failureThreshold: 1
+  initialDelaySeconds: 2
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 2
+livenessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 2
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 2
+
+providers:
+  kubernetesGateway:
+    enabled: true
+    experimentalChannel: false
+
+  kubernetesIngressNginx:
+    enabled: true
+    controllerClass: "k8s.io/ingress-nginx"
+    ingressClass: "nginx"
+
+logs:
+  general:
+    level: INFO
+    noColor: false
+
+  access:
+    enabled: true
+
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+ports:
+  traefik:
+    port: 8080
+    expose:
+      default: false
+    exposedPort: 8080
+    protocol: TCP
+  web:
+    port: 8000
+    expose:
+      default: true
+    exposedPort: 80
+    protocol: TCP
+  websecure:
+    port: 8443
+    expose:
+      default: true
+    exposedPort: 443
+    protocol: TCP
+    http3:
+      enabled: true
+    tls:
+      enabled: true
+
+service:
+  enabled: true
+  single: true
+  type: LoadBalancer
+
+autoscaling:
+  enabled: false
+  minReplicas:
+  maxReplicas:
+  metrics: []
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: "{{ template \"traefik.fullname\" . }}"
