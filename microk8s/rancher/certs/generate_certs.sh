@@ -2,7 +2,7 @@
 
 # Generate domain private key
 openssl genrsa -out vmstar.lan.key 2048
-# Generate Certificate Signing Request (CSR) with the domain private key and the san.cnf configuation
+# Generate Certificate Signing Request (CSR) with the domain private key and the san.cnf configuration
 openssl req -new -key vmstar.lan.key -out vmstar.lan.csr -subj "/CN=*.vmstar.lan" -config san.cnf
 # Generate certificate and private key signing with the CA
 openssl x509 -req -in vmstar.lan.csr -CA localCA.crt -CAkey localCA.key \
