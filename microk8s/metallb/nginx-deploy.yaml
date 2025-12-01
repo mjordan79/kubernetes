@@ -55,7 +55,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: nginx.objectway.it
+  - host: nginx.vmstar.lan
     http:
       paths:
       - backend:
