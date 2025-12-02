@@ -1,19 +1,44 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: nginx
+  name: nginx-app
 
 ---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: tls-secret
+  namespace: nginx-app
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: digitalnucleus-store
+    kind: ClusterSecretStore
+  target:
+    name: vmstar.lan
+    creationPolicy: Owner
+    template:
+      type: kubernetes.io/tls
+  data:
+    - secretKey: tls.crt
+      remoteRef:
+        key: tls-secret
+        property: tls.crt
+    - secretKey: tls.key
+      remoteRef:
+        key: tls-secret
+        property: tls.key
 
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
     app: nginx
   name: nginx
-  namespace: nginx
+  namespace: nginx-app
 spec:
-  replicas: 4
+  replicas: 2
   selector:
     matchLabels:
       app: nginx
@@ -29,14 +54,13 @@ spec:
         - containerPort: 80
 
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   labels:
     app: nginx
   name: nginx
-  namespace: nginx
+  namespace: nginx-app
 spec:
   ports:
   - port: 80
@@ -46,12 +70,11 @@ spec:
     app: nginx
 
 ---
-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: nginx
-  namespace: nginx
+  namespace: nginx-app
 spec:
   ingressClassName: nginx
   rules:
@@ -65,4 +88,8 @@ spec:
               number: 80
         path: /
         pathType: Prefix
+  tls:
+    - hosts:
+        - nginx.vmstar.lan
+      secretName: vmstar.lan
 

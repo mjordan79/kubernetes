@@ -18,7 +18,7 @@ gateway:
       port: 8443
       protocol: HTTPS
       certificateRefs:
-        - name: my-tls-secret
+        - name: vmstar.lan
 
 gatewayClass:
   enabled: true
