@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: nginx-app
+  name: nginx-app-ingress
 
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: tls-secret
-  namespace: nginx-app
+  namespace: nginx-app-ingress
 spec:
   refreshInterval: 1h
   secretStoreRef:
@@ -34,22 +34,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: nginx
-  name: nginx
-  namespace: nginx-app
+    app: nginx-ingress
+  name: nginx-ingress
+  namespace: nginx-app-ingress
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: nginx
+      app: nginx-ingress
   template:
     metadata:
       labels:
-        app: nginx
+        app: nginx-ingress
     spec:
       containers:
       - image: nginx:latest
-        name: nginx
+        name: nginx-ingress
         ports:
         - containerPort: 80
 
@@ -58,38 +58,38 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: nginx
-  name: nginx
-  namespace: nginx-app
+    app: nginx-ingress
+  name: nginx-ingress
+  namespace: nginx-app-ingress
 spec:
   ports:
   - port: 80
     protocol: TCP
     targetPort: 80
   selector:
-    app: nginx
+    app: nginx-ingress
 
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: nginx
-  namespace: nginx-app
+  name: nginx-ingress
+  namespace: nginx-app-ingress
 spec:
   ingressClassName: nginx
   rules:
-  - host: nginx.vmstar.lan
+  - host: nginx-ingress.vmstar.lan
     http:
       paths:
       - backend:
           service:
-            name: nginx
+            name: nginx-ingress
             port:
               number: 80
         path: /
         pathType: Prefix
   tls:
     - hosts:
-        - nginx.vmstar.lan
+        - nginx-ingress.vmstar.lan
       secretName: vmstar.lan
 

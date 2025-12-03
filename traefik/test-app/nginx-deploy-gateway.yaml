@@ -1,55 +1,29 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: nginx-app
-
----
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: tls-secret
-  namespace: nginx-app
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: digitalnucleus-store
-    kind: ClusterSecretStore
-  target:
-    name: vmstar.lan
-    creationPolicy: Owner
-    template:
-      type: kubernetes.io/tls
-  data:
-    - secretKey: tls.crt
-      remoteRef:
-        key: tls-secret
-        property: tls.crt
-    - secretKey: tls.key
-      remoteRef:
-        key: tls-secret
-        property: tls.key
+  name: nginx-app-gateway
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: nginx
-  name: nginx
-  namespace: nginx-app
+    app: nginx-gateway
+  name: nginx-gateway
+  namespace: nginx-app-gateway
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: nginx
+      app: nginx-gateway
   template:
     metadata:
       labels:
-        app: nginx
+        app: nginx-gateway
     spec:
       containers:
       - image: nginx:latest
-        name: nginx
+        name: nginx-gateway
         ports:
         - containerPort: 80
 
@@ -58,37 +32,57 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: nginx
-  name: nginx
-  namespace: nginx-app
+    app: nginx-gateway
+  name: nginx-gateway
+  namespace: nginx-app-gateway
 spec:
   ports:
   - port: 80
     protocol: TCP
     targetPort: 80
   selector:
-    app: nginx
+    app: nginx-gateway
 
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: nginx
-  namespace: nginx-app
+  name: nginx-gateway
+  namespace: nginx-app-gateway
 spec:
   parentRefs:
     - name: traefik-gateway
       namespace: traefik-gateway
-      sectionName: websecure   # listener HTTPS del tuo Gateway
+      sectionName: websecure
   hostnames:
-    - "nginx.vmstar.lan"
+    - "nginx-gateway.vmstar.lan"
   rules:
     - matches:
         - path:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: nginx
+        - name: nginx-gateway
           port: 80
 
-
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: traefik-dashboard
+  namespace: traefik-gateway
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik-gateway
+  hostnames:
+    - dashboard.vmstar.lan
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /traefik
+      backendRefs:
+        - kind: TraefikService
+          group: traefik.io
+          name: api@internal

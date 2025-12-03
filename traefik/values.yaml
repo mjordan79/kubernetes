@@ -11,6 +11,9 @@ ingressClass:
 gateway:
   enabled: true
   listeners:
+    traefik:
+      port: 8080
+      protocol: HTTP
     web:
       port: 8000
       protocol: HTTP
@@ -25,6 +28,7 @@ gatewayClass:
 
 api:
   dashboard: true
+  insecure: true
   basepath: /traefik
 
 updateStrategy:
@@ -58,7 +62,7 @@ providers:
 
 logs:
   general:
-    level: INFO
+    level: DEBUG
     noColor: false
 
   access:
@@ -72,7 +76,7 @@ ports:
   traefik:
     port: 8080
     expose:
-      default: false
+      default: true
     exposedPort: 8080
     protocol: TCP
   web:
