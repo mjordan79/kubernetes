@@ -11,25 +11,21 @@ ingressClass:
 gateway:
   enabled: true
   listeners:
-    traefik:
-      port: 8080
-      protocol: HTTP
     web:
       port: 8000
       protocol: HTTP
+      namespacePolicy:
+        from: All
     websecure:
       port: 8443
       protocol: HTTPS
+      namespacePolicy:
+        from: All
       certificateRefs:
         - name: vmstar.lan
 
 gatewayClass:
   enabled: true
-
-api:
-  dashboard: true
-  insecure: true
-  basepath: /traefik
 
 updateStrategy:
   type: RollingUpdate
@@ -49,6 +45,13 @@ livenessProbe:
   periodSeconds: 10
   successThreshold: 1
   timeoutSeconds: 2
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.vmstar.lan`)
+    entryPoints:
+      - websecure
 
 providers:
   kubernetesGateway:

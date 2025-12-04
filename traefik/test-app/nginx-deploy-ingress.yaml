@@ -75,6 +75,9 @@ kind: Ingress
 metadata:
   name: nginx-ingress
   namespace: nginx-app-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   rules:
