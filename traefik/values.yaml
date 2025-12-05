@@ -1,13 +1,82 @@
-deployment:
-  kind: DaemonSet
+ports:
+  # Defines the entrypoint named 'traefik'
+  traefik:
+    port: 8080
+    expose:
+      default: true
+    exposedPort: 8080
+    protocol: TCP
+  # Defines the HTTP entrypoint named 'web'
+  web:
+    port: 8000
+    expose:
+      default: true
+    exposedPort: 80
+    protocol: TCP
+#   redirections:
+#     entryPoint:
+#       to: websecure
+#       scheme: https
+#       permanent: true
+  # Defines the HTTPS entrypoint named 'websecure'
+  websecure:
+    port: 8443
+    expose:
+      default: true
+    exposedPort: 443
+    protocol: TCP
+    http3:
+      enabled: true
+    tls:
+      enabled: true
 
-podDisruptionBudget:
-  enabled: true
-  maxUnavailable: 1
+# Enables the dashboard in secure mode
+api:
+  dashboard: true
+  insecure: false
 
+# Enables the dashboard
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.vmstar.lan`)
+    entryPoints:
+      - websecure
+    middlewares:
+      - name: dashboard-auth
+
+# Creates a BasiAuth Middleware and Secret for the Dashboard Security
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: dashboard-auth-secret
+    type: kubernetes.io/basic-auth
+    stringData:
+      username: admin
+      password: "P@ssw0rd"      # Replace with an Actual Password
+  - apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: dashboard-auth
+    spec:
+      basicAuth:
+        secret: dashboard-auth-secret
+
+# We don't need the traefik ingress class, we use the nginx ingress controller instead
 ingressClass:
   enabled: false
 
+providers:
+  kubernetesGateway:
+    enabled: true
+    experimentalChannel: false
+  kubernetesIngressNginx:
+    enabled: true
+    controllerClass: "k8s.io/ingress-nginx"
+    ingressClass: "nginx"
+
+# Gateway Listeners
 gateway:
   enabled: true
   listeners:
@@ -21,11 +90,45 @@ gateway:
       protocol: HTTPS
       namespacePolicy:
         from: All
+      mode: Terminate
       certificateRefs:
-        - name: vmstar.lan
+        - kind: Secret
+          name: vmstar.lan
 
 gatewayClass:
   enabled: true
+
+service:
+  enabled: true
+  single: true
+  type: LoadBalancer
+
+logs:
+  general:
+    level: INFO
+    noColor: false
+  access:
+    enabled: true
+
+# Enables Prometheus for Metrics
+metrics:
+  prometheus:
+    enabled: false
+
+deployment:
+  kind: Deployment
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1024Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
 
 updateStrategy:
   type: RollingUpdate
@@ -46,69 +149,21 @@ livenessProbe:
   successThreshold: 1
   timeoutSeconds: 2
 
-ingressRoute:
-  dashboard:
-    enabled: true
-    matchRule: Host(`traefik.vmstar.lan`)
-    entryPoints:
-      - websecure
-
-providers:
-  kubernetesGateway:
-    enabled: true
-    experimentalChannel: false
-
-  kubernetesIngressNginx:
-    enabled: true
-    controllerClass: "k8s.io/ingress-nginx"
-    ingressClass: "nginx"
-
-logs:
-  general:
-    level: DEBUG
-    noColor: false
-
-  access:
-    enabled: true
-
 global:
   checkNewVersion: true
   sendAnonymousUsage: false
 
-ports:
-  traefik:
-    port: 8080
-    expose:
-      default: true
-    exposedPort: 8080
-    protocol: TCP
-  web:
-    port: 8000
-    expose:
-      default: true
-    exposedPort: 80
-    protocol: TCP
-  websecure:
-    port: 8443
-    expose:
-      default: true
-    exposedPort: 443
-    protocol: TCP
-    http3:
-      enabled: true
-    tls:
-      enabled: true
-
-service:
-  enabled: true
-  single: true
-  type: LoadBalancer
-
 autoscaling:
-  enabled: false
-  minReplicas:
-  maxReplicas:
-  metrics: []
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
