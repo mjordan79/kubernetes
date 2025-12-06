@@ -51,17 +51,16 @@ metadata:
   namespace: nginx-app-gateway
 spec:
   parentRefs:
-    - name: traefik-gateway
-      namespace: traefik-gateway
-      sectionName: websecure
+  - name: traefik-gateway
+    namespace: traefik-gateway
+    sectionName: websecure
   hostnames:
     - "nginx-gateway.vmstar.lan"
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: nginx-gateway
-          port: 80
-
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: nginx-gateway
+      port: 80
