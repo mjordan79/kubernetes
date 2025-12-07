@@ -8,9 +8,9 @@ kubectl create ns traefik-gateway
 kubectl create -f ./externalsecret.yaml
 echo "Waiting 4 seconds for certificate propagation ..."
 sleep 4
-kubectl create -f ./nginx-ingressclass.yaml
 if [[ "$WITH_SIGS_API" == "--with-sigs-api" ]];
 then
+  echo "Installing official SIGS API 1.4 for Gateway APIs..."
   kubectl create -f ./crd/1.4.1/standard-install.yaml
 fi
 helm upgrade --install traefik-gateway traefik/traefik \
