@@ -1,0 +1,5 @@
+https://github.com/canonical/microk8s/issues/3574
+
+cp /var/snap/microk8s/current/args/cni-network/cni.yaml /var/snap/microk8s/current/args/cni-network/cni.yaml.bak
+cp /snap/microk8s/current/args/cni-network/cni.yaml /var/snap/microk8s/current/args/cni-network/cni.yaml
+kubectl apply -f /var/snap/microk8s/current/args/cni-network/cni.yaml
