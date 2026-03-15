@@ -7,4 +7,4 @@ helm repo add rancher-stable https://releases.rancher.com/server-charts/stable &
         --set hostname=rancher2.vmstar.lan \
         --set bootstrapPassword=admin \
         --set ingress.tls.source=secret \
-        --set privateCA=false
+        --set privateCA=true
